@@ -1,7 +1,8 @@
 // Uso:
-//   node render.js stills 0.5 3.2 9.8     → out/frame_<t>.png en esos segundos
-//   node render.js mockup                 → out/boceto.png y out/boceto_guias.png
-//   node render.js video                  → out/demo.mp4 (1080×1920, 30 fps)
+//   node render.js stills 0.5 3.2 9.8 [--glass] [--h=1920]  → out/frame_<t>.png
+//   node render.js video [--glass] [--h=1920]                → out/demo[_glass][_9x16].mp4
+//   node render.js clip 20 26 [--glass]                      → solo ese tramo (prueba rápida)
+// Por defecto 1080×2340 (pantalla completa en iPhone, 9:19.5).
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -9,44 +10,47 @@ const path = require('path');
 
 const FPS = 30;
 const OUT = path.join(__dirname, 'out');
-const URL = 'file://' + path.join(__dirname, 'index.html') + '?render=1';
 
 (async () => {
-  const [mode, ...args] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const flags = argv.filter(a => a.startsWith('--'));
+  const [mode, ...args] = argv.filter(a => !a.startsWith('--'));
+  const glass = flags.includes('--glass');
+  const H = +(flags.find(f => f.startsWith('--h='))?.slice(4) ?? 2340);
+  const q = new URLSearchParams({ render: 1, h: H }); if (glass) q.set('glass', 1);
+  const suffix = (glass ? '_glass' : '') + (H === 1920 ? '_9x16' : '');
+
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-  await page.goto(URL);
-  await page.evaluate(() => document.fonts.ready);
+  const page = await browser.newPage({ viewport: { width: 1080, height: H }, deviceScaleFactor: 1 });
+  page.on('pageerror', e => console.error('ERROR en página:', e.message));
+  await page.goto('file://' + path.join(__dirname, 'index.html') + '?' + q);
+  await page.waitForFunction(() => window.READY === true);
   const duration = await page.evaluate(() => TL.duration);
 
   if (mode === 'stills') {
     for (const s of args) {
       await page.evaluate(t => renderAt(t), +s);
-      await page.screenshot({ path: path.join(OUT, `frame_${s}.png`) });
+      await page.screenshot({ path: path.join(OUT, `frame_${s}${suffix}.png`) });
     }
-  } else if (mode === 'mockup') {
-    const t = +(args[0] ?? 13.6);
-    await page.evaluate(t => renderAt(t), t);
-    await page.screenshot({ path: path.join(OUT, 'boceto.png') });
-    await page.evaluate(t => renderAt(t, true), t);
-    await page.screenshot({ path: path.join(OUT, 'boceto_guias.png') });
-  } else if (mode === 'video') {
-    const total = Math.ceil(duration * FPS);
-    const tmp = path.join(OUT, 'demo.tmp.mp4');
+  } else if (mode === 'video' || mode === 'clip') {
+    const t0 = mode === 'clip' ? +args[0] : 0, t1 = mode === 'clip' ? +args[1] : duration;
+    const name = (mode === 'clip' ? 'clip' : 'demo') + suffix + '.mp4';
+    const tmp = path.join(OUT, name.replace('.mp4', '.tmp.mp4'));
     const ff = spawn('ffmpeg', ['-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
       '-c:v', 'libx264', '-crf', '18', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', tmp],
       { stdio: ['pipe', 'ignore', 'inherit'] });
+    const total = Math.ceil((t1 - t0) * FPS);
     for (let f = 0; f < total; f++) {
-      await page.evaluate(t => renderAt(t), f / FPS);
+      await page.evaluate(t => renderAt(t), t0 + f / FPS);
       const buf = await page.screenshot({ type: 'jpeg', quality: 92 });
       if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
     }
     ff.stdin.end();
     const code = await new Promise(r => ff.on('close', r));
     if (code !== 0) throw new Error('ffmpeg falló: ' + code);
-    fs.renameSync(tmp, path.join(OUT, 'demo.mp4'));
-    console.log(`demo.mp4: ${total} frames, ${duration.toFixed(2)} s`);
+    fs.renameSync(tmp, path.join(OUT, name));
+    console.log(`${name}: ${total} frames`);
   }
   console.log('duración del guion:', duration.toFixed(2), 's');
   await browser.close();

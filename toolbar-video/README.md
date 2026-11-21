@@ -1,4 +1,30 @@
-# Toolbar Video: boceto
+# Toolbar Video
+
+> **Versión actual: v2** (`index.html`). La v1, fiel a Photoshop, quedó en `v1-photoshop.html` y en `out/v1_*`.
+
+## v2: interfaz más abstracta y moderna (estilo Figma)
+
+- **Formato 1080 × 2340 (9:19.5)**: llena la pantalla del iPhone 16 (2556 × 1179). Un video 9:16 deja barras negras arriba y abajo. `--h=1920` saca la versión 9:16 si se necesita para otra plataforma.
+- **Barra de herramientas flotante**: separada 28 px del borde, con esquinas redondeadas (30 px) y sombra, centrada en vertical y fija. La herramienta activa se marca en azul (`#0D99FF`).
+- **Recortar → Mano (H)**: la Mano arrastra el lienzo hasta otra zona para empezar una idea nueva.
+- **Fondo oscuro con puntos** (`#141518` y puntos `#2E3037`) anclados al mundo: se mueven y escalan con la cámara.
+- **Lienzo con esquinas redondeadas (44 px)** y de **cualquier proporción**. Es más grande que la pantalla y abraza el contenido: no tiene que caber completo.
+- **Barra superior** pegada al borde de arriba y con la misma paleta. El zoom (`100%` → `56%`) se actualiza en vivo.
+- **Cierre de "pizarra"** (inspirado en RSA Animate y VideoScribe): `⇧ 1` aleja la cámara para mostrar todo el lienzo, y el Pincel dibuja una flecha que conecta las ideas.
+- **Prueba translúcida** (`?glass` / `--glass`): barra con `backdrop-filter: blur(26px)` al 58 % de opacidad. Sobre el fondo oscuro se ve igual que la sólida. Sobre el lienzo blanco se vuelve gris medio y los iconos pierden contraste (ver `out/comparacion_solida_vs_glass.png`). Si se usa, conviene subir la opacidad a ~75 %.
+
+Nuevas acciones del guion: `{ do:'pan', from, by }` (Mano), `{ do:'zoomFit', label }` (alejar para ver todo) y `{ do:'stroke', pts }` (trazo de Pincel con flecha opcional). El bote rellena con color o con patrón (`pattern:'subpix'`).
+
+```bash
+node render.js video            # out/demo.mp4 (1080×2340)
+node render.js video --glass    # out/demo_glass.mp4
+node render.js stills 23.2 36.6 # fotogramas sueltos
+node render.js clip 20 26       # solo un tramo
+```
+
+---
+
+## v1: notas originales
 
 Videos explicativos en 9:16 con estilo flat. El giro es que **la animación la "ejecuta" un cursor con las herramientas de una app de diseño**, a la manera de Photoshop. El cursor va a la barra, toma una herramienta, vuelve al lienzo y dibuja, selecciona o escribe lo que ilustra la narración.
 
