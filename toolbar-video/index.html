@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toolbar Video · Boceto</title>
+<style>
+  :root{
+    --chrome:#262626;      /* barra de menú / pestañas */
+    --panel:#2E2E2E;       /* barra de herramientas y barra de opciones */
+    --panel-line:#3B3B3B;
+    --paste:#1B1B1B;       /* mesa de trabajo (pasteboard) */
+    --btn-on:#555555;      /* herramienta activa */
+    --btn-hover:#3E3E3E;
+    --icon:#CFCFCF;
+    --icon-on:#FFFFFF;
+    --text:#C8C8C8;
+  }
+  html,body{margin:0;background:#111;overflow:hidden}
+  #stage{width:1080px;height:1920px;transform-origin:0 0;position:absolute;left:0;top:0}
+  svg{display:block}
+  text{font-family:Inter, "Inter Display", system-ui, sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+<svg id="svg" width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="canvasShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+    <filter id="tipShadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity=".5"/>
+    </filter>
+  </defs>
+  <g id="ui"></g>
+  <g id="canvasLayer"></g>
+  <g id="overlay"></g>
+  <g id="guides"></g>
+  <text id="measure" x="-9999" y="-9999" font-weight="800"></text>
+</svg>
+</div>
+
+<script>
+/* =====================================================================
+   LAYOUT 1080 × 1920
+   ===================================================================== */
+const W = 1080, H = 1920;
+const L = {
+  menuH: 64,                 // barra de menú
+  optY: 64,  optH: 72,       // barra de opciones de herramienta
+  tabY: 136, tabH: 56,       // pestaña del documento
+  tbX: 0, tbY: 136, tbW: 132,// barra de herramientas (columna izquierda)
+  btn: 104, gap: 10, btnY0: 204,
+  canvas: { x: 198, y: 232, w: 816, h: 1400 },   // lienzo blanco
+  statusH: 44,
+};
+
+/* 10 herramientas: las más clásicas de Photoshop, en su orden real (arriba → abajo) */
+const TOOLS = [
+  { id:'move',    name:'Mover',            key:'V' },
+  { id:'marquee', name:'Marco rectangular',key:'M' },
+  { id:'crop',    name:'Recortar',         key:'C' },
+  { id:'eyedrop', name:'Cuentagotas',      key:'I' },
+  { id:'brush',   name:'Pincel',           key:'B' },
+  { id:'eraser',  name:'Borrador',         key:'E' },
+  { id:'bucket',  name:'Bote de pintura',  key:'G' },
+  { id:'pen',     name:'Pluma',            key:'P' },
+  { id:'type',    name:'Texto horizontal', key:'T' },
+  { id:'rect',    name:'Rectángulo',       key:'U' },
+];
+const toolIndex = Object.fromEntries(TOOLS.map((t,i)=>[t.id,i]));
+function btnRect(id){
+  const i = toolIndex[id];
+  const x = (L.tbW - L.btn)/2, y = L.btnY0 + i*(L.btn+L.gap);
+  return { x, y, w:L.btn, h:L.btn, cx:x+L.btn/2, cy:y+L.btn/2 };
+}
+
+/* Iconos (24×24, trazo). Dibujos propios, inspirados en la iconografía clásica. */
+const ICONS = {
+  move:   `<path d="M5 3v13.5l3.6-3.2 2.6 5.4 2.1-1-2.5-5.2H15.6z" fill="currentColor" stroke="none"/>
+           <path d="M18.5 2.5v8M14.5 6.5h8M17 4l1.5-1.5L20 4M17 9l1.5 1.5L20 9M16 5l-1.5 1.5L16 8M21 5l1.5 1.5L21 8"/>`,
+  marquee:`<rect x="3.5" y="5" width="17" height="14" stroke-dasharray="2.6 2.1"/>`,
+  crop:   `<path d="M7 2.5v14.5h14.5M2.5 7h14.5v14.5"/>`,
+  eyedrop:`<path d="M16.6 3.4a2.2 2.2 0 0 1 3.1 3.1L17.3 9l1.1 1.1-1.6 1.6-5.5-5.5 1.6-1.6L14 5.7z"/>
+           <path d="M12.6 7.9 5 15.5V19h3.5l7.6-7.6"/>`,
+  brush:  `<path d="M20 3.2c-3.4 1-7.4 5-9.4 8.2l2.9 2.9c3.2-2 7.2-6 8.2-9.4.3-1.1-.6-2-1.7-1.7z"/>
+           <path d="M9.6 12.6c-2.2 0-3.8 1.5-3.8 3.6 0 1.6-1 2.6-2.6 3.1 3.4 1.2 7.5.1 8.3-3.3z" fill="currentColor"/>`,
+  eraser: `<path d="M8.6 20 3.9 15.3a1.6 1.6 0 0 1 0-2.2l9.2-9.2a1.6 1.6 0 0 1 2.2 0l4.8 4.8a1.6 1.6 0 0 1 0 2.2L11 20z"/>
+           <path d="M8.2 8.8l7 7M11 20h9.5"/>`,
+  bucket: `<path d="M3.8 11.2 11 4l8 8-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.1z"/>
+           <path d="M8.5 6.5 5.5 3.5M3.8 11.2H19"/>
+           <path d="M20.3 14.6s-1.9 2.3-1.9 3.6a1.9 1.9 0 0 0 3.8 0c0-1.3-1.9-3.6-1.9-3.6z" fill="currentColor" stroke="none"/>`,
+  pen:    `<path d="M12 2.5 18 10l-3 8.5H9L6 10z"/><path d="M12 2.5v8"/>
+           <circle cx="12" cy="12.6" r="1.5"/><path d="M9 21.5h6"/>`,
+  type:   `<path d="M5 5.5h14M12 5.5v13.5M9.2 19h5.6" stroke-width="2.1"/>`,
+  rect:   `<rect x="4" y="5" width="16" height="14" rx="1.2"/>`,
+};
+function iconSVG(id, x, y, size, color){
+  const s = size/24;
+  return `<g transform="translate(${x},${y}) scale(${s})" fill="none" stroke="${color}" color="${color}"
+            stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round">${ICONS[id]}</g>`;
+}
+
+/* =====================================================================
+   UI ESTÁTICA (se dibuja una vez)
+   ===================================================================== */
+const C = L.canvas;
+function buildUI(){
+  const menu = ['Archivo','Edición','Imagen','Capa','Texto','Selección','Filtro','Ver'];
+  let mx = 84, menuItems = '';
+  for (const m of menu){ menuItems += `<text x="${mx}" y="41" font-size="23" fill="#BDBDBD">${m}</text>`; mx += textWidth(m, 23, 400) + 30; }
+
+  let ui = `
+  <rect width="${W}" height="${H}" fill="var(--paste)"/>
+  <!-- barra de menú -->
+  <rect width="${W}" height="${L.menuH}" fill="var(--chrome)"/>
+  <g transform="translate(26,16)" fill="none" stroke="#BDBDBD" stroke-width="2.4" stroke-linejoin="round">
+    <path d="M2 14 16 2l14 12M6 11v17h20V11"/>
+  </g>
+  ${menuItems}
+  <!-- barra de opciones -->
+  <rect y="${L.optY}" width="${W}" height="${L.optH}" fill="var(--panel)"/>
+  <rect y="${L.optY}" width="${W}" height="1" fill="#1A1A1A"/>
+  <rect y="${L.optY+L.optH-1}" width="${W}" height="1" fill="#1A1A1A"/>
+  <g id="optbar"></g>
+  <!-- pestaña de documento -->
+  <rect x="${L.tbW}" y="${L.tabY}" width="${W-L.tbW}" height="${L.tabH}" fill="var(--chrome)"/>
+  <rect x="${L.tbW}" y="${L.tabY}" width="470" height="${L.tabH}" fill="var(--panel)"/>
+  <rect x="${L.tbW}" y="${L.tabY}" width="470" height="3" fill="#6E6E6E"/>
+  <text x="${L.tbW+22}" y="${L.tabY+36}" font-size="22" fill="#E2E2E2">pixel.psd @ 100% (RGB/8)</text>
+  <text x="${L.tbW+438}" y="${L.tabY+37}" font-size="24" fill="#9A9A9A">×</text>
+  <!-- barra de herramientas -->
+  <rect x="0" y="${L.tbY}" width="${L.tbW}" height="${H-L.tbY-L.statusH}" fill="var(--panel)"/>
+  <rect x="${L.tbW-1}" y="${L.tbY}" width="1" height="${H-L.tbY-L.statusH}" fill="#151515"/>
+  <g fill="#7A7A7A">${[0,1,2].map(i=>`<rect x="${46+i*16}" y="${L.tbY+20}" width="8" height="3" rx="1.5"/>`).join('')}</g>
+  <text x="${L.tbW/2}" y="${L.tbY+52}" font-size="20" fill="#8A8A8A" text-anchor="middle">»</text>
+  <g id="toolbtns"></g>
+  <!-- colores frontal / fondo -->
+  <g id="swatches"></g>
+  <!-- botón "…" editar barra -->
+  <g fill="#9A9A9A">${[0,1,2].map(i=>`<circle cx="${L.tbW/2-16+i*16}" cy="1566" r="3.5"/>`).join('')}</g>
+  <!-- lienzo -->
+  <rect x="${C.x}" y="${C.y}" width="${C.w}" height="${C.h}" fill="#FFFFFF" filter="url(#canvasShadow)"/>
+  <!-- barra de estado -->
+  <rect y="${H-L.statusH}" width="${W}" height="${L.statusH}" fill="var(--panel)"/>
+  <rect y="${H-L.statusH}" width="${W}" height="1" fill="#151515"/>
+  <text x="22" y="${H-15}" font-size="20" fill="#A8A8A8">100%</text>
+  <text x="110" y="${H-15}" font-size="20" fill="#8C8C8C">816 px × 1400 px (72 ppi)</text>
+  `;
+  document.getElementById('ui').innerHTML = ui;
+}
+
+/* =====================================================================
+   GUION → LÍNEA DE TIEMPO
+   Cada paso es una acción "humana": ir a la barra, hacer clic, volver,
+   arrastrar sobre el lienzo, escribir, o usar un atajo de teclado.
+   ===================================================================== */
+const PIX = { x:300, y:556, s:612, r:30 };          // el "píxel" del demo
+const third = PIX.s/3;
+const COLORS = { dark:'#1F2430', R:'#FF4D4D', G:'#2BD17E', B:'#3B82F6' };
+
+const SCRIPT = [
+  { do:'wait', dur:0.7 },
+  { do:'pick', tool:'rect' },
+  { do:'drag', from:[PIX.x,PIX.y], to:[PIX.x+PIX.s,PIX.y+PIX.s], dur:1.0,
+    make:{ type:'shape', fill:COLORS.dark, r:PIX.r } },
+  { do:'wait', dur:0.35 },
+  { do:'pick', tool:'marquee' },
+  { do:'drag', from:[PIX.x,PIX.y], to:[PIX.x+third,PIX.y+PIX.s], dur:0.7, make:{ type:'marquee' } },
+  { do:'pick', tool:'bucket' },
+  { do:'click', at:[PIX.x+third/2, PIX.y+PIX.s*0.45], make:{ type:'fill', color:COLORS.R } },
+  /* A partir de aquí, atajos de teclado: el cursor ya no viaja a la barra */
+  { do:'key', tool:'marquee' },
+  { do:'drag', from:[PIX.x+third,PIX.y], to:[PIX.x+2*third,PIX.y+PIX.s], dur:0.55, make:{ type:'marquee' } },
+  { do:'key', tool:'bucket' },
+  { do:'click', at:[PIX.x+third*1.5, PIX.y+PIX.s*0.55], make:{ type:'fill', color:COLORS.G } },
+  { do:'key', tool:'marquee' },
+  { do:'drag', from:[PIX.x+2*third,PIX.y], to:[PIX.x+PIX.s,PIX.y+PIX.s], dur:0.55, make:{ type:'marquee' } },
+  { do:'key', tool:'bucket' },
+  { do:'click', at:[PIX.x+third*2.5, PIX.y+PIX.s*0.5], make:{ type:'fill', color:COLORS.B } },
+  { do:'deselect' },
+  { do:'pick', tool:'type' },
+  { do:'click', at:[PIX.x+4, 1318], make:{ type:'text', text:'1 píxel = 3 luces', size:74, color:COLORS.dark } },
+  { do:'type', dur:1.3 },
+  { do:'wait', dur:1.6 },
+];
+
+const ease = t => t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+const easeOut = t => 1-Math.pow(1-t,3);
+const clamp01 = t => Math.max(0,Math.min(1,t));
+const lerp = (a,b,t)=>a+(b-a)*t;
+
+function compile(script){
+  const tl = { moves:[], tool:[{t:0,id:'move'}], hovers:[], clicks:[], keys:[], objects:[], fg:[{t:0,c:'#000000'}], press:[] };
+  let cur = 0, pos = [C.x + C.w*0.62, C.y + C.h*0.78];
+  const moveTo = (to, durOverride) => {
+    const d = Math.hypot(to[0]-pos[0], to[1]-pos[1]);
+    if (d < 1) return 0;
+    const dur = durOverride ?? Math.min(0.85, Math.max(0.45, 0.32 + d/1700));
+    tl.moves.push({ t0:cur, t1:cur+dur, from:pos, to, arc:true });
+    pos = to; cur += dur; return dur;
+  };
+  const endMarquees = t => tl.objects.forEach(o=>{ if(o.type==='marquee' && o.tEnd===Infinity) o.tEnd=t; });
+  let lastText = null;
+
+  for (const s of script){
+    if (s.do==='wait'){ cur += s.dur; }
+    else if (s.do==='pick'){
+      const b = btnRect(s.tool);
+      const tArrive = cur + moveTo([b.cx+6, b.cy+8]);
+      tl.hovers.push({ t0:tArrive-0.12, t1:tArrive+0.55, id:s.tool });
+      tl.clicks.push({ t:tArrive+0.28, x:pos[0], y:pos[1] });
+      tl.press.push({ t:tArrive+0.28, id:s.tool });
+      tl.tool.push({ t:tArrive+0.3, id:s.tool });
+      cur = tArrive + 0.5;
+    }
+    else if (s.do==='key'){
+      tl.keys.push({ t:cur, label:TOOLS[toolIndex[s.tool]].key, x:pos[0], y:pos[1] });
+      tl.press.push({ t:cur+0.08, id:s.tool });
+      tl.tool.push({ t:cur+0.08, id:s.tool });
+      cur += 0.45;
+    }
+    else if (s.do==='deselect'){
+      tl.keys.push({ t:cur, label:'Ctrl D', x:pos[0], y:pos[1] });
+      endMarquees(cur+0.1);
+      cur += 0.5;
+    }
+    else if (s.do==='drag'){
+      moveTo(s.from);
+      cur += 0.08;
+      if (s.make.type==='marquee') endMarquees(cur);
+      tl.moves.push({ t0:cur, t1:cur+s.dur, from:s.from, to:s.to, arc:false });
+      tl.objects.push({ ...s.make, x0:s.from[0], y0:s.from[1], x1:s.to[0], y1:s.to[1], t0:cur, t1:cur+s.dur, tEnd:Infinity });
+      pos = s.to; cur += s.dur + 0.15;
+    }
+    else if (s.do==='click'){
+      moveTo(s.at);
+      cur += 0.06;
+      tl.clicks.push({ t:cur, x:pos[0], y:pos[1] });
+      const o = { ...s.make, x:s.at[0], y:s.at[1], t0:cur, t1:cur+0.55, tEnd:Infinity };
+      if (o.type==='fill'){
+        const m = [...tl.objects].reverse().find(q=>q.type==='marquee' && q.t0<=cur);
+        o.clip = m ? [Math.min(m.x0,m.x1),Math.min(m.y0,m.y1),Math.abs(m.x1-m.x0),Math.abs(m.y1-m.y0)] : [C.x,C.y,C.w,C.h];
+        tl.fg.push({ t:cur-0.3, c:o.color });
+        cur += 0.6;
+      } else if (o.type==='text'){
+        o.typeStart = o.typeEnd = cur + 0.35; lastText = o; cur += 0.35;
+      }
+      tl.objects.push(o);
+    }
+    else if (s.do==='type' && lastText){
+      lastText.typeStart = cur; lastText.typeEnd = cur + s.dur;
+      tl.moves.push({ t0:cur, t1:cur+0.4, from:pos, to:[pos[0]+60, pos[1]+150], arc:false });
+      pos = [pos[0]+60, pos[1]+150];
+      cur += s.dur;
+      lastText.commit = cur + 0.35;
+    }
+  }
+  tl.duration = cur;
+  return tl;
+}
+
+/* =====================================================================
+   RENDER(t) — función pura del tiempo: sirve para vista previa y para exportar
+   ===================================================================== */
+const measureEl = document.getElementById('measure');
+const widthCache = {};
+function textWidth(str, size, weight=800){
+  const k = size+'|'+weight+'|'+str; if (k in widthCache) return widthCache[k];
+  measureEl.setAttribute('font-size', size); measureEl.setAttribute('font-weight', weight); measureEl.textContent = str;
+  return widthCache[k] = measureEl.getComputedTextLength();
+}
+
+function cursorAt(tl, t){
+  let p = null;
+  for (const m of tl.moves){
+    if (t < m.t0) break;
+    if (t <= m.t1){
+      const k = ease(clamp01((t-m.t0)/(m.t1-m.t0)));
+      let x = lerp(m.from[0], m.to[0], k), y = lerp(m.from[1], m.to[1], k);
+      if (m.arc){ // ligera curva, como una mano real
+        const dx = m.to[0]-m.from[0], dy = m.to[1]-m.from[1], d = Math.hypot(dx,dy);
+        const bow = Math.sin(Math.PI*k) * d * 0.08;
+        x += -dy/d*bow; y += dx/d*bow;
+      }
+      return [x,y];
+    }
+    p = m.to;
+  }
+  return p ?? (tl.moves[0]?.from ?? [C.x+C.w/2, C.y+C.h/2]);
+}
+const lastBefore = (arr, t) => { let v = arr[0]; for (const a of arr){ if (a.t<=t) v=a; else break; } return v; };
+
+function renderToolbar(tl, t){
+  const active = lastBefore(tl.tool, t).id;
+  const hover = tl.hovers.find(h=>t>=h.t0 && t<=h.t1);
+  let g = '';
+  for (const tool of TOOLS){
+    const b = btnRect(tool.id);
+    const on = tool.id===active, hv = hover && hover.id===tool.id && !on;
+    const pr = tl.press.find(p=>t>=p.t && t<=p.t+0.16 && p.id===tool.id);
+    const sc = pr ? 0.9 : 1;
+    const bg = on ? 'var(--btn-on)' : hv ? 'var(--btn-hover)' : 'transparent';
+    const col = on ? 'var(--icon-on)' : 'var(--icon)';
+    g += `<g transform="translate(${b.cx},${b.cy}) scale(${sc}) translate(${-b.cx},${-b.cy})">
+      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="12" fill="${bg}"/>
+      ${iconSVG(tool.id, b.cx-28, b.cy-28, 56, col)}
+      <path d="M${b.x+b.w-10} ${b.y+b.h-20}v10h-10z" fill="${on?'#DADADA':'#8A8A8A'}"/>
+    </g>`;
+  }
+  document.getElementById('toolbtns').innerHTML = g;
+  const fg = lastBefore(tl.fg, t).c;
+  document.getElementById('swatches').innerHTML = `
+    <rect x="${L.tbW/2-12}" y="1436" width="50" height="50" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
+    <rect x="${L.tbW/2-40}" y="1408" width="50" height="50" fill="${fg}" stroke="#E0E0E0" stroke-width="2"/>
+    <path d="M${L.tbW/2+18} 1398h14v14" fill="none" stroke="#9A9A9A" stroke-width="2"/>
+    <rect x="${L.tbW/2-40}" y="1498" width="16" height="16" fill="#000" stroke="#ddd" stroke-width="1.5"/>
+    <rect x="${L.tbW/2-30}" y="1508" width="16" height="16" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+
+  // barra de opciones según la herramienta activa
+  const tool = TOOLS[toolIndex[active]];
+  const opts = {
+    move:   `<text x="290" y="108" font-size="21" fill="#A8A8A8">Selección automática:  Capa</text>`,
+    marquee:`<text x="370" y="108" font-size="21" fill="#A8A8A8">Calado: 0 px      ☑ Suavizar</text>`,
+    bucket: `<text x="370" y="108" font-size="21" fill="#A8A8A8">Tolerancia: 32     ☑ Contiguo</text>`,
+    type:   `<text x="370" y="108" font-size="21" fill="#A8A8A8">Inter   ·   ExtraBold   ·   74 pt</text>`,
+    rect:   `<text x="330" y="108" font-size="21" fill="#A8A8A8">Relleno</text><rect x="412" y="88" width="30" height="30" rx="4" fill="${COLORS.dark}" stroke="#777"/>
+             <text x="470" y="108" font-size="21" fill="#A8A8A8">Trazo</text><rect x="532" y="88" width="30" height="30" rx="4" fill="none" stroke="#777" stroke-width="2"/><path d="M534 116l26-26" stroke="#E5484D" stroke-width="2"/>`,
+  }[active] ?? '';
+  document.getElementById('optbar').innerHTML = `
+    <rect x="14" y="${L.optY+10}" width="52" height="52" rx="8" fill="#3A3A3A"/>
+    ${iconSVG(active, 22, L.optY+18, 36, '#EDEDED')}
+    <path d="M74 98l6 6 6-6" fill="none" stroke="#9A9A9A" stroke-width="2"/>
+    <rect x="102" y="${L.optY+16}" width="1" height="40" fill="#4A4A4A"/>
+    <text x="120" y="108" font-size="22" font-weight="600" fill="#E6E6E6">${tool.name}</text>
+    ${opts}`;
+  return { active, hover };
+}
+
+function renderCanvas(tl, t){
+  let g = '';
+  for (const o of tl.objects){
+    if (t < o.t0 || t >= o.tEnd) continue;
+    const k = clamp01((t-o.t0)/(o.t1-o.t0));
+    if (o.type==='shape'){
+      const kk = ease(k);
+      const x1 = lerp(o.x0,o.x1,kk), y1 = lerp(o.y0,o.y1,kk);
+      const x = Math.min(o.x0,x1), y = Math.min(o.y0,y1), w = Math.abs(x1-o.x0), h = Math.abs(y1-o.y0);
+      const r = Math.min(o.r, w/2, h/2);
+      const outline = 1 - clamp01((t-o.t1)/0.35);
+      g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${o.fill}"/>`;
+      if (outline>0) g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="#2F8CFF" stroke-width="3" opacity="${outline}"/>`;
+    }
+    else if (o.type==='fill'){
+      const [cx,cy,cw,ch] = o.clip;
+      const R = Math.hypot(Math.max(o.x-cx, cx+cw-o.x), Math.max(o.y-cy, cy+ch-o.y)) * easeOut(k);
+      const id = 'clip'+Math.round(o.t0*1000);
+      g += `<clipPath id="${id}"><rect x="${PIX.x}" y="${PIX.y}" width="${PIX.s}" height="${PIX.s}" rx="${PIX.r}"/></clipPath>
+            <g clip-path="url(#${id})"><clipPath id="${id}b"><rect x="${cx}" y="${cy}" width="${cw}" height="${ch}"/></clipPath>
+            <circle cx="${o.x}" cy="${o.y}" r="${R}" fill="${o.color}" clip-path="url(#${id}b)"/></g>`;
+    }
+    else if (o.type==='text'){
+      const n = o.text.length;
+      const shown = t < o.typeStart ? 0 : Math.round(n * clamp01((t-o.typeStart)/Math.max(0.001,o.typeEnd-o.typeStart)));
+      const str = o.text.slice(0, shown);
+      const tw = str ? textWidth(str, o.size) : 0;
+      g += `<text x="${o.x}" y="${o.y}" font-size="${o.size}" font-weight="800" fill="${o.color}" letter-spacing="-1">${str.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
+      const committed = o.commit && t >= o.commit;
+      if (!committed){
+        const blink = (t < o.typeStart || t > o.typeEnd) ? (Math.floor((t-o.t0)*2.4)%2===0) : true;
+        if (blink) g += `<rect x="${o.x+tw+4}" y="${o.y-o.size*0.82}" width="3" height="${o.size*0.98}" fill="#111"/>`;
+        // línea base de texto de punto
+        g += `<rect x="${o.x-2}" y="${o.y+10}" width="${Math.max(tw+10, 24)}" height="2" fill="#2F8CFF" opacity=".8"/>`;
+      }
+    }
+  }
+  // selecciones (hormigas en marcha) siempre por encima
+  for (const o of tl.objects){
+    if (o.type!=='marquee' || t < o.t0 || t >= o.tEnd) continue;
+    const k = clamp01((t-o.t0)/(o.t1-o.t0)), kk = ease(k);
+    const x1 = lerp(o.x0,o.x1,kk), y1 = lerp(o.y0,o.y1,kk);
+    const x = Math.min(o.x0,x1), y = Math.min(o.y0,y1), w = Math.abs(x1-o.x0), h = Math.abs(y1-o.y0);
+    const off = (t*36)%16;
+    g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#fff" stroke-width="3"/>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#000" stroke-width="3" stroke-dasharray="8 8" stroke-dashoffset="${-off}"/>`;
+  }
+  document.getElementById('canvasLayer').innerHTML = g;
+}
+
+/* Cursores dibujados (blanco con contorno negro, legibles a 1080 px) */
+function cursorSVG(kind, x, y){
+  const O = `stroke="#000" stroke-width="2.4" stroke-linejoin="round"`;
+  switch(kind){
+    case 'cross': return `<g transform="translate(${x},${y})">
+        <path d="M-26 0h18M8 0h18M0 -26v18M0 8v18" stroke="#000" stroke-width="7" stroke-linecap="round"/>
+        <path d="M-26 0h18M8 0h18M0 -26v18M0 8v18" stroke="#fff" stroke-width="3" stroke-linecap="round"/></g>`;
+    case 'ibeam': return `<g transform="translate(${x},${y})">
+        <path d="M-10 -26q10 0 10 6v40q0 6 -10 6M10 -26q-10 0 -10 6v40q0 6 10 6" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round"/>
+        <path d="M-10 -26q10 0 10 6v40q0 6 -10 6M10 -26q-10 0 -10 6v40q0 6 10 6" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></g>`;
+    case 'bucket': return `<g transform="translate(${x-9},${y-62}) scale(3)">
+        <path d="M3.8 11.2 11 4l8 8-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.1z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/>
+        <path d="M8.5 6.5 5.5 3.5" stroke="#000" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M3.4 20.2s-1.6-2.1-1.6-3.2a1.6 1.6 0 0 1 3.2 0c0 1.1-1.6 3.2-1.6 3.2z" fill="#fff" stroke="#000" stroke-width="1"/></g>`;
+    default: return `<g transform="translate(${x},${y}) scale(2.1)">
+        <path d="M0 0v22l5.2-4.8 3.6 7.8 3.4-1.5-3.6-7.6H16z" fill="#fff" ${O} stroke-width="1.3"/></g>`;
+  }
+}
+
+function renderOverlay(tl, t, active, hover){
+  let g = '';
+  // tooltip de la herramienta
+  if (hover){
+    const a = clamp01((t-hover.t0)/0.12) * (1-clamp01((t-(hover.t1-0.12))/0.12));
+    const b = btnRect(hover.id), tool = TOOLS[toolIndex[hover.id]];
+    const tw = textWidth(tool.name, 26, 600) + 100;
+    const x = L.tbW + 14, y = b.cy - 30;
+    g += `<g opacity="${a}" filter="url(#tipShadow)">
+      <rect x="${x}" y="${y}" width="${tw}" height="60" rx="10" fill="#3A3A3A" stroke="#555"/>
+      <text x="${x+20}" y="${y+39}" font-size="26" font-weight="600" fill="#F2F2F2">${tool.name}</text>
+      <rect x="${x+tw-58}" y="${y+12}" width="40" height="36" rx="7" fill="#262626" stroke="#666"/>
+      <text x="${x+tw-38}" y="${y+38}" font-size="22" font-weight="700" fill="#E6E6E6" text-anchor="middle">${tool.key}</text>
+    </g>`;
+  }
+  // ondas de clic
+  for (const c of tl.clicks){
+    const k = (t-c.t)/0.45; if (k<0||k>1) continue;
+    g += `<circle cx="${c.x}" cy="${c.y}" r="${10+46*easeOut(k)}" fill="none" stroke="#2F8CFF" stroke-width="${5*(1-k)+1}" opacity="${1-k}"/>`;
+  }
+  // tecla de atajo
+  for (const kk of tl.keys){
+    const k = (t-kk.t)/0.75; if (k<0||k>1) continue;
+    const pop = k<0.2 ? easeOut(k/0.2) : 1, a = k>0.75 ? 1-(k-0.75)/0.25 : 1;
+    const w = kk.label.length>1 ? 124 : 76, x = kk.x+34, y = kk.y+40;
+    g += `<g opacity="${a}" transform="translate(${x+w/2},${y+38}) scale(${0.6+0.4*pop}) translate(${-(x+w/2)},${-(y+38)})">
+      <rect x="${x}" y="${y+6}" width="${w}" height="76" rx="14" fill="#0E0E0E"/>
+      <rect x="${x}" y="${y}" width="${w}" height="72" rx="14" fill="#F4F4F4" stroke="#0E0E0E" stroke-width="3"/>
+      <text x="${x+w/2}" y="${y+48}" font-size="34" font-weight="800" fill="#141414" text-anchor="middle">${kk.label}</text></g>`;
+  }
+  // cursor
+  const [x,y] = cursorAt(tl, t);
+  const overCanvas = x>C.x && x<C.x+C.w && y>C.y && y<C.y+C.h;
+  const kind = !overCanvas ? 'arrow' : ({marquee:'cross', rect:'cross', crop:'cross', type:'ibeam', bucket:'bucket'}[active] ?? 'arrow');
+  g += cursorSVG(kind, x, y);
+  document.getElementById('overlay').innerHTML = g;
+}
+
+function renderGuides(on){
+  if (!on){ document.getElementById('guides').innerHTML=''; return; }
+  document.getElementById('guides').innerHTML = `
+    <rect x="${W-150}" y="900" width="140" height="760" fill="#FF3B6B" opacity=".18"/>
+    <text x="${W-80}" y="1280" font-size="20" fill="#FF7A9A" text-anchor="middle" transform="rotate(-90 ${W-80} 1280)">Botones de Reels / TikTok</text>
+    <rect x="${L.tbW+10}" y="1650" width="${W-L.tbW-20}" height="215" fill="none" stroke="#FFD34D" stroke-width="3" stroke-dasharray="14 10" rx="12"/>
+    <text x="${(W+L.tbW)/2}" y="1772" font-size="26" fill="#FFD34D" text-anchor="middle">Zona de subtítulos (sobre la mesa oscura)</text>`;
+}
+
+const TL = compile(SCRIPT);
+window.TL = TL;
+window.renderAt = function(t, guides=false){
+  const { active, hover } = renderToolbar(TL, t);
+  renderCanvas(TL, t);
+  renderOverlay(TL, t, active, hover);
+  renderGuides(guides);
+};
+buildUI();
+
+/* Vista previa en navegador (escala a la ventana y reproduce en bucle) */
+const params = new URLSearchParams(location.search);
+if (!params.has('render')){
+  const stage = document.getElementById('stage');
+  const fit = () => { const s = Math.min(innerWidth/W, innerHeight/H); stage.style.transform = `scale(${s})`; stage.style.left = (innerWidth-W*s)/2+'px'; };
+  addEventListener('resize', fit); fit();
+  const t0 = performance.now(), guides = params.has('guides');
+  const loop = () => { renderAt(((performance.now()-t0)/1000) % (TL.duration+0.5), guides); requestAnimationFrame(loop); };
+  loop();
+} else {
+  renderAt(0);
+}
+</script>
+</body>
+</html>
