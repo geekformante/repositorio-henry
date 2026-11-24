@@ -1,7 +1,7 @@
 // Uso:
-//   node render.js stills 0.5 3.2 9.8 [--glass] [--h=1920]  → out/frame_<t>.png
-//   node render.js video [--glass] [--h=1920]                → out/demo[_glass][_9x16].mp4
-//   node render.js clip 20 26 [--glass]                      → solo ese tramo (prueba rápida)
+//   node render.js stills 0.5 3.2 9.8 [--solid] [--h=1920]  → out/frame_<t>.png
+//   node render.js video [--solid] [--h=1920]                → out/demo[_glass][_9x16].mp4
+//   node render.js clip 20 26 [--solid]                      → solo ese tramo (prueba rápida)
 // Por defecto 1080×2340 (pantalla completa en iPhone, 9:19.5).
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -15,10 +15,10 @@ const OUT = path.join(__dirname, 'out');
   const argv = process.argv.slice(2);
   const flags = argv.filter(a => a.startsWith('--'));
   const [mode, ...args] = argv.filter(a => !a.startsWith('--'));
-  const glass = flags.includes('--glass');
+  const solid = flags.includes('--solid');
   const H = +(flags.find(f => f.startsWith('--h='))?.slice(4) ?? 2340);
-  const q = new URLSearchParams({ render: 1, h: H }); if (glass) q.set('glass', 1);
-  const suffix = (glass ? '_glass' : '') + (H === 1920 ? '_9x16' : '');
+  const q = new URLSearchParams({ render: 1, h: H }); if (solid) q.set('solid', 1);
+  const suffix = (solid ? '_solid' : '') + (H === 1920 ? '_9x16' : '');
 
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();

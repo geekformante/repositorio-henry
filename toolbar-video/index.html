@@ -10,8 +10,8 @@
   #stage > *{position:absolute;left:0;top:0}
   svg{display:block}
   text{font-family:Inter, "Inter Display", system-ui, sans-serif}
-  #glass{display:none;box-sizing:border-box;border-radius:30px;
-    background:rgba(26,27,31,.58);
+  #glass{display:none;box-sizing:border-box;border-radius:32px;
+    background:rgba(24,25,29,.66);
     -webkit-backdrop-filter:blur(26px) saturate(170%);backdrop-filter:blur(26px) saturate(170%);
     border:1.5px solid rgba(255,255,255,.10);
     box-shadow:0 18px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08)}
@@ -45,6 +45,7 @@
       <filter id="tbShadow" x="-40%" y="-10%" width="180%" height="120%">
         <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".5"/>
       </filter>
+      <linearGradient id="icoGrad" x1="0" x2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#2A2B30"/></linearGradient>
       <filter id="tipShadow" x="-20%" y="-40%" width="140%" height="180%">
         <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity=".5"/>
       </filter>
@@ -60,58 +61,78 @@
 /* =====================================================================
    PARÁMETROS
    ?h=2340 (por defecto, pantalla completa iPhone 9:19.5) · ?h=1920 (9:16)
-   ?glass  → barra translúcida con desenfoque
+   ?solid  → barra opaca (por defecto es translúcida con desenfoque)
    ===================================================================== */
 const P = new URLSearchParams(location.search);
-const W = 1080, H = +(P.get('h') || 2340), GLASS = P.has('glass');
+const W = 1080, H = +(P.get('h') || 2340), GLASS = !P.has('solid');   // translúcida por defecto; ?solid para la opaca
 
-const TOP = { menuH:64, optY:64, optH:72, tabY:136, tabH:56, bottom:192 };
+const TOP = { bottom:0 };   // sin interfaz superior
 const ACCENT = '#0D99FF';
 const INK = '#1F2430';
 
-/* 10 herramientas — se cambió Recortar por Mano (desplazar el lienzo) */
+/* Barra de una sola hilera con herramientas de Illustrator (orden real, arriba → abajo).
+   Los id 'marquee' y 'bucket' se conservan para el guion: son Selección y Bote de pintura interactiva. */
 const TOOLS = [
-  { id:'move',    name:'Mover',             key:'V' },
-  { id:'marquee', name:'Marco rectangular', key:'M' },
-  { id:'eyedrop', name:'Cuentagotas',       key:'I' },
-  { id:'brush',   name:'Pincel',            key:'B' },
-  { id:'eraser',  name:'Borrador',          key:'E' },
-  { id:'bucket',  name:'Bote de pintura',   key:'G' },
-  { id:'pen',     name:'Pluma',             key:'P' },
-  { id:'type',    name:'Texto',             key:'T' },
-  { id:'rect',    name:'Rectángulo',        key:'U' },
-  { id:'hand',    name:'Mano',              key:'H' },
+  { id:'marquee', name:'Selección',          key:'V' },
+  { id:'direct',  name:'Selección directa',  key:'A' },
+  { id:'wand',    name:'Varita mágica',      key:'Y' },
+  { id:'lasso',   name:'Lazo',               key:'Q' },
+  { id:'pen',     name:'Pluma',              key:'P' },
+  { id:'type',    name:'Texto',              key:'T' },
+  { id:'line',    name:'Segmento de línea',  key:'\\' },
+  { id:'rect',    name:'Rectángulo',         key:'M' },
+  { id:'ellipse', name:'Elipse',             key:'L' },
+  { id:'brush',   name:'Pincel',             key:'B' },
+  { id:'pencil',  name:'Lápiz',              key:'N' },
+  { id:'eraser',  name:'Borrador',           key:'⇧E' },
+  { id:'rotate',  name:'Rotar',              key:'R' },
+  { id:'scale',   name:'Escala',             key:'S' },
+  { id:'builder', name:'Generador de formas',key:'⇧M' },
+  { id:'bucket',  name:'Bote de pintura interactiva', key:'K' },
+  { id:'gradient',name:'Degradado',          key:'G' },
+  { id:'eyedrop', name:'Cuentagotas',        key:'I' },
+  { id:'graph',   name:'Gráfica de columnas',key:'J' },
+  { id:'artboard',name:'Mesa de trabajo',    key:'⇧O' },
+  { id:'hand',    name:'Mano',               key:'H' },
+  { id:'zoom',    name:'Zoom',               key:'Z' },
 ];
 const toolIndex = Object.fromEntries(TOOLS.map((t,i)=>[t.id,i]));
 
-/* Barra flotante desacoplada */
-const TB = { x:28, w:112, pad:12, btn:88, gap:8, r:30 };
+/* Barra flotante: de arriba a abajo del video, con el mismo aire que a la izquierda */
+const TB = { x:28, pad:14, gap:6, r:32, head:40, foot:300 };
+TB.y = TB.x; TB.h = H - 2*TB.x;
+TB.btn = Math.floor((TB.h - 2*TB.pad - TB.head - TB.foot - (TOOLS.length-1)*TB.gap) / TOOLS.length);
+TB.w = TB.btn + 2*TB.pad;
 TB.btnsH = TOOLS.length*TB.btn + (TOOLS.length-1)*TB.gap;
-TB.h = TB.pad*2 + TB.btnsH + 22 + 96;           // + divisor + colores
-TB.y = Math.round(TOP.bottom + (H - TOP.bottom - TB.h)/2);
+TB.btnY0 = TB.y + TB.pad + TB.head;
 function btnRect(id){
-  const i = toolIndex[id], x = TB.x + TB.pad, y = TB.y + TB.pad + i*(TB.btn+TB.gap);
+  const i = toolIndex[id], x = TB.x + TB.pad, y = TB.btnY0 + i*(TB.btn+TB.gap);
   return { x, y, w:TB.btn, h:TB.btn, cx:x+TB.btn/2, cy:y+TB.btn/2 };
 }
 
 const ICONS = {
-  move:   `<path d="M5 3v13.5l3.6-3.2 2.6 5.4 2.1-1-2.5-5.2H15.6z" fill="currentColor" stroke="none"/>
-           <path d="M18.5 2.5v8M14.5 6.5h8M17 4l1.5-1.5L20 4M17 9l1.5 1.5L20 9M16 5l-1.5 1.5L16 8M21 5l1.5 1.5L21 8"/>`,
-  marquee:`<rect x="3.5" y="5" width="17" height="14" rx="1" stroke-dasharray="2.6 2.1"/>`,
-  eyedrop:`<path d="M16.6 3.4a2.2 2.2 0 0 1 3.1 3.1L17.3 9l1.1 1.1-1.6 1.6-5.5-5.5 1.6-1.6L14 5.7z"/>
-           <path d="M12.6 7.9 5 15.5V19h3.5l7.6-7.6"/>`,
-  brush:  `<path d="M20 3.2c-3.4 1-7.4 5-9.4 8.2l2.9 2.9c3.2-2 7.2-6 8.2-9.4.3-1.1-.6-2-1.7-1.7z"/>
-           <path d="M9.6 12.6c-2.2 0-3.8 1.5-3.8 3.6 0 1.6-1 2.6-2.6 3.1 3.4 1.2 7.5.1 8.3-3.3z" fill="currentColor"/>`,
-  eraser: `<path d="M8.6 20 3.9 15.3a1.6 1.6 0 0 1 0-2.2l9.2-9.2a1.6 1.6 0 0 1 2.2 0l4.8 4.8a1.6 1.6 0 0 1 0 2.2L11 20z"/>
-           <path d="M8.2 8.8l7 7M11 20h9.5"/>`,
-  bucket: `<path d="M3.8 11.2 11 4l8 8-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.1z"/>
-           <path d="M8.5 6.5 5.5 3.5M3.8 11.2H19"/>
-           <path d="M20.3 14.6s-1.9 2.3-1.9 3.6a1.9 1.9 0 0 0 3.8 0c0-1.3-1.9-3.6-1.9-3.6z" fill="currentColor" stroke="none"/>`,
-  pen:    `<path d="M12 2.5 18 10l-3 8.5H9L6 10z"/><path d="M12 2.5v8"/>
-           <circle cx="12" cy="12.6" r="1.5"/><path d="M9 21.5h6"/>`,
+  marquee:`<path d="M6.5 3v16.5l4.3-4.2 2.9 6.4 2.6-1.2-2.9-6.2h6z" fill="currentColor"/>`,
+  direct: `<path d="M6.5 3v16.5l4.3-4.2 2.9 6.4 2.6-1.2-2.9-6.2h6z"/>`,
+  wand:   `<path d="M4 20 14.5 9.5" stroke-width="2.2"/><path d="M17.5 2.5v3M17.5 9.5v3M12.5 7.5h3M19.5 7.5h3M14.6 4.6l1.4 1.4M19 9l1.4 1.4M20.4 4.6 19 6"/>`,
+  lasso:  `<ellipse cx="13" cy="8.5" rx="8" ry="5"/><path d="M7.5 12.2c-1.6 1.1-1.8 3 .2 3.6 1.6.5 1.3 2.6-.9 3.9"/>`,
+  pen:    `<path d="M12 2.5 18 10l-3 8.5H9L6 10z"/><path d="M12 2.5v8"/><circle cx="12" cy="12.6" r="1.5"/><path d="M9 21.5h6"/>`,
   type:   `<path d="M5 5.5h14M12 5.5v13.5M9.2 19h5.6" stroke-width="2.1"/>`,
-  rect:   `<rect x="4" y="5" width="16" height="14" rx="2.5"/>`,
+  line:   `<path d="M5 19 19 5" stroke-width="1.9"/>`,
+  rect:   `<rect x="4" y="5" width="16" height="14" rx="1.5"/>`,
+  ellipse:`<ellipse cx="12" cy="12" rx="8.5" ry="6.5" fill="currentColor" fill-opacity=".25"/>`,
+  brush:  `<path d="M20 3.2c-3.4 1-7.4 5-9.4 8.2l2.9 2.9c3.2-2 7.2-6 8.2-9.4.3-1.1-.6-2-1.7-1.7z"/><path d="M9.6 12.6c-2.2 0-3.8 1.5-3.8 3.6 0 1.6-1 2.6-2.6 3.1 3.4 1.2 7.5.1 8.3-3.3z" fill="currentColor"/>`,
+  pencil: `<path d="M4 20l1.2-4.6L15.8 4.8a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path d="M14 6.6l3.4 3.4M5.2 15.4l3.4 3.4"/>`,
+  eraser: `<path d="M8.6 20 3.9 15.3a1.6 1.6 0 0 1 0-2.2l9.2-9.2a1.6 1.6 0 0 1 2.2 0l4.8 4.8a1.6 1.6 0 0 1 0 2.2L11 20z"/><path d="M8.2 8.8l7 7M11 20h9.5"/>`,
+  rotate: `<path d="M18.5 12a6.5 6.5 0 1 1-1.9-4.6" stroke-dasharray="2 2.2"/><path d="M17.5 3.5v4.4h-4.4"/>`,
+  scale:  `<rect x="3.5" y="10.5" width="10" height="10" rx="1"/><rect x="9" y="4" width="11" height="11" rx="1" stroke-dasharray="2.2 1.8"/><path d="M13 11l4-4M14 7h3v3"/>`,
+  builder:`<circle cx="9" cy="10" r="5.5"/><rect x="10" y="9" width="9.5" height="9.5" rx="1"/><path d="M10 10a5.5 5.5 0 0 1 4.5 4.5" fill="currentColor" fill-opacity=".5"/>`,
+  bucket: `<path d="M3.8 11.2 11 4l8 8-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.1z"/><path d="M8.5 6.5 5.5 3.5M3.8 11.2H19"/><path d="M20.3 14.6s-1.9 2.3-1.9 3.6a1.9 1.9 0 0 0 3.8 0c0-1.3-1.9-3.6-1.9-3.6z" fill="currentColor" stroke="none"/>`,
+  gradient:`<rect x="4" y="5" width="16" height="14" rx="1.5" fill="url(#icoGrad)"/>`,
+  eyedrop:`<path d="M16.6 3.4a2.2 2.2 0 0 1 3.1 3.1L17.3 9l1.1 1.1-1.6 1.6-5.5-5.5 1.6-1.6L14 5.7z"/><path d="M12.6 7.9 5 15.5V19h3.5l7.6-7.6"/>`,
+  graph:  `<path d="M3.5 20.5h17M6.5 20V12M10.5 20V5.5M14.5 20V9M18.5 20v-6" stroke-width="2.2"/>`,
+  artboard:`<rect x="7.5" y="7.5" width="12" height="12" rx="1"/><path d="M7.5 2.5v3M2.5 7.5h3M19.5 21.5v-0M4 4l2 2"/>`,
   hand:   `<path d="M8 12.5V5.6a1.5 1.5 0 0 1 3 0V11M11 10.5V4.1a1.5 1.5 0 0 1 3 0V11M14 10.8V5.6a1.5 1.5 0 0 1 3 0V12M17 8.6a1.5 1.5 0 0 1 3 0V15a6.2 6.2 0 0 1-6.2 6.2h-1.4a6.2 6.2 0 0 1-4.8-2.3L4.2 15a1.6 1.6 0 0 1 2.4-2.1L8 14.3"/>`,
+  zoom:   `<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3 20.5 20.5" stroke-width="2.4"/>`,
 };
 function iconSVG(id, x, y, size, color){
   return `<g transform="translate(${x},${y}) scale(${size/24})" fill="none" stroke="${color}" color="${color}"
@@ -204,7 +225,7 @@ function catmull(pts, n){
 }
 
 function compile(script){
-  const tl = { moves:[], cams:[], tool:[{t:0,id:'move'}], hovers:[], clicks:[], keys:[], objects:[],
+  const tl = { moves:[], cams:[], tool:[{t:0,id:'marquee'}], hovers:[], clicks:[], keys:[], objects:[],
                fg:[{t:0,c:'#000000'}], press:[], grabs:[] };
   let cur = 0, cam = { x:0, y:0, s:1 };
   let pos = [760, PIX.y + PIX.s + 420];
@@ -357,43 +378,6 @@ function buildStatic(){
   if (GLASS){ const g=$('glass'); Object.assign(g.style,{display:'block',left:TB.x+'px',top:TB.y+'px',width:TB.w+'px',height:TB.h+'px'}); }
 }
 
-function renderTop(tl, t, active, cam){
-  const menu = ['Archivo','Edición','Imagen','Capa','Texto','Selección','Filtro','Ver'];
-  let mx = 84, items = '';
-  for (const m of menu){ items += `<text x="${mx}" y="41" font-size="23" fill="#B9BBC2">${m}</text>`; mx += textWidth(m,23,400) + 30; }
-  const tool = TOOLS[toolIndex[active]];
-  const opts = {
-    move:   `Selección automática:  Capa`,
-    marquee:`Calado: 0 px      ☑ Suavizar`,
-    bucket: `Tolerancia: 32     ☑ Contiguo`,
-    type:   `Inter   ·   ExtraBold`,
-    rect:   `Relleno  ■     Trazo  ⧄`,
-    hand:   `Desplazar todas las ventanas`,
-    brush:  `Tamaño: 14 px     Dureza: 100%`,
-  }[active] ?? '';
-  const zoom = Math.round(cam.s*100);
-  $('top').innerHTML = `
-    <rect width="${W}" height="${TOP.menuH}" fill="#1B1C20"/>
-    <g transform="translate(26,16)" fill="none" stroke="#B9BBC2" stroke-width="2.4" stroke-linejoin="round"><path d="M2 14 16 2l14 12M6 11v17h20V11"/></g>
-    ${items}
-    <rect y="${TOP.optY}" width="${W}" height="${TOP.optH}" fill="#222328"/>
-    <rect y="${TOP.optY}" width="${W}" height="1" fill="#2E3036"/>
-    <rect x="14" y="${TOP.optY+10}" width="52" height="52" rx="12" fill="#2F3137"/>
-    ${iconSVG(active, 22, TOP.optY+18, 36, '#EDEDED')}
-    <rect x="84" y="${TOP.optY+16}" width="1.5" height="40" fill="#3A3C43"/>
-    <text x="104" y="108" font-size="22" font-weight="600" fill="#ECEDEF">${tool.name}</text>
-    <text x="${118+textWidth(tool.name,22,600)+30}" y="108" font-size="21" fill="#9EA1A9">${opts}</text>
-    <rect x="${W-118}" y="${TOP.optY+16}" width="100" height="40" rx="20" fill="#2F3137"/>
-    <text x="${W-68}" y="${TOP.optY+43}" font-size="21" font-weight="600" fill="#ECEDEF" text-anchor="middle">${zoom}%</text>
-    <rect y="${TOP.tabY}" width="${W}" height="${TOP.tabH}" fill="#1B1C20"/>
-    <rect y="${TOP.tabY}" width="${W}" height="1" fill="#2E3036"/>
-    <rect x="16" y="${TOP.tabY+8}" width="380" height="${TOP.tabH-8}" rx="12" fill="#222328"/>
-    <rect x="16" y="${TOP.tabY+30}" width="380" height="${TOP.tabH-30}" fill="#222328"/>
-    <circle cx="40" cy="${TOP.tabY+32}" r="6" fill="${ACCENT}"/>
-    <text x="58" y="${TOP.tabY+39}" font-size="21" fill="#E2E3E6">pixel.psd @ ${zoom}%</text>
-    <text x="370" y="${TOP.tabY+39}" font-size="22" fill="#8E9199" text-anchor="middle">×</text>`;
-}
-
 function renderToolbar(tl, t){
   const active = lastBefore(tl.tool, t).id;
   const hover = tl.hovers.find(h=>t>=h.t0 && t<=h.t1);
@@ -406,14 +390,26 @@ function renderToolbar(tl, t){
     const sc = pr ? 0.88 : 1;
     const bg = on ? ACCENT : hv ? (GLASS ? 'rgba(255,255,255,.12)' : '#30323A') : 'none';
     g += `<g transform="translate(${b.cx},${b.cy}) scale(${sc}) translate(${-b.cx},${-b.cy})">
-      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="20" fill="${bg}"/>
-      ${iconSVG(tool.id, b.cx-25, b.cy-25, 50, on ? '#FFFFFF' : '#D3D5DA')}</g>`;
+      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="${Math.round(TB.btn*0.24)}" fill="${bg}"/>
+      ${iconSVG(tool.id, b.cx-TB.btn*0.29, b.cy-TB.btn*0.29, TB.btn*0.58, on ? '#FFFFFF' : '#D3D5DA')}</g>`;
   }
-  const dy = TB.y + TB.pad + TB.btnsH + 11;
-  const fg = lastBefore(tl.fg, t).c, cx = TB.x + TB.w/2;
-  g += `<rect x="${TB.x+22}" y="${dy}" width="${TB.w-44}" height="1.5" fill="${GLASS?'rgba(255,255,255,.14)':'#34363D'}"/>
-    <rect x="${cx-10}" y="${dy+34}" width="44" height="44" rx="12" fill="#FFFFFF" stroke="#202126" stroke-width="3"/>
-    <rect x="${cx-34}" y="${dy+14}" width="44" height="44" rx="12" fill="${fg}" stroke="#E6E7EA" stroke-width="3"/>`;
+  // cabecera: agarradera de panel
+  const cx = TB.x + TB.w/2, line = GLASS ? 'rgba(255,255,255,.16)' : '#34363D';
+  g += `<g fill="#7C7F88">${[-2,-1,0,1,2].map(i=>`<rect x="${cx+i*8-1.5}" y="${TB.y+TB.pad+12}" width="3" height="12" rx="1.5"/>`).join('')}</g>`;
+  // pie: relleno / trazo al estilo Illustrator, modos de color y "más herramientas"
+  const fy = TB.btnY0 + TB.btnsH + 18, fg = lastBefore(tl.fg, t).c;
+  g += `<rect x="${TB.x+20}" y="${fy}" width="${TB.w-40}" height="1.5" fill="${line}"/>
+    <rect x="${cx-16}" y="${fy+56}" width="58" height="58" rx="10" fill="none" stroke="#0E0F12" stroke-width="16"/>
+    <rect x="${cx-16}" y="${fy+56}" width="58" height="58" rx="10" fill="none" stroke="#E6E7EA" stroke-width="10"/>
+    <rect x="${cx-42}" y="${fy+26}" width="58" height="58" rx="10" fill="${fg}" stroke="#E6E7EA" stroke-width="3"/>
+    <path d="M${cx+20} ${fy+22}h14v14" fill="none" stroke="#9EA1A9" stroke-width="2.5" stroke-linecap="round"/>
+    <g transform="translate(${cx-42},${fy+150})">
+      <rect width="24" height="24" rx="5" fill="#FFFFFF"/>
+      <rect x="30" width="24" height="24" rx="5" fill="url(#icoGrad)" stroke="#9EA1A9" stroke-width="1"/>
+      <rect x="60" width="24" height="24" rx="5" fill="#FFFFFF"/><path d="M62 22 82 2" stroke="#E5484D" stroke-width="3"/></g>
+    <rect x="${TB.x+20}" y="${fy+196}" width="${TB.w-40}" height="1.5" fill="${line}"/>
+    <rect x="${TB.x+TB.pad}" y="${fy+214}" width="${TB.btn}" height="44" rx="12" fill="${GLASS?'rgba(255,255,255,.08)':'#2A2C32'}"/>
+    <g fill="#C9CBD1">${[-1,0,1].map(i=>`<circle cx="${cx+i*14}" cy="${fy+236}" r="3.5"/>`).join('')}</g>`;
   $('toolbar').innerHTML = g;
   return { active, hover };
 }
@@ -528,7 +524,7 @@ function renderOverlay(tl, t, active, hover, cam){
   const overUI = y < TOP.bottom || (x > TB.x && x < TB.x+TB.w && y > TB.y && y < TB.y+TB.h);
   const grabbing = tl.grabs.some(gr=>t>=gr.t0 && t<=gr.t1);
   const kind = overUI ? 'arrow' : active==='hand' ? (grabbing ? 'grab' : 'hand')
-             : ({marquee:'cross', rect:'cross', type:'ibeam', bucket:'bucket', brush:'brush'}[active] ?? 'arrow');
+             : ({rect:'cross', ellipse:'cross', type:'ibeam', bucket:'bucket', brush:'brush'}[active] ?? 'arrow');
   g += cursorSVG(kind, x, y, cam.s);
   $('overlay').innerHTML = g;
 }
@@ -538,7 +534,6 @@ window.renderAt = function(t){
   const cam = camAt(TL, t);
   const { active, hover } = renderToolbar(TL, t);
   renderWorld(TL, t, cam);
-  renderTop(TL, t, active, cam);
   renderOverlay(TL, t, active, hover, cam);
 };
 

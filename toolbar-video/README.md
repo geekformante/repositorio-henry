@@ -1,6 +1,6 @@
 # Toolbar Video
 
-> **Versión actual: v2** (`index.html`). La v1, fiel a Photoshop, quedó en `v1-photoshop.html` y en `out/v1_*`.
+> **Versión actual: v3** (`index.html`): barra de una hilera con herramientas de Illustrator, translúcida por defecto (`?solid` para la opaca), de arriba a abajo del video con 28 px de aire, y sin interfaz superior. La v1, fiel a Photoshop, quedó en `v1-photoshop.html` y en `out/v1_*`.
 
 ## v2: interfaz más abstracta y moderna (estilo Figma)
 
