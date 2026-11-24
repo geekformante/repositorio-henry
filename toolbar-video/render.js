@@ -38,7 +38,7 @@ const OUT = path.join(__dirname, 'out');
     const scene = await page.evaluate(() => (new URLSearchParams(location.search).get('scene') || 'jpgxl'));
     const name = (mode === 'clip' ? 'clip_' : '') + scene + suffix + '.mp4';
     const tmp = path.join(OUT, name.replace('.mp4', '.tmp.mp4'));
-    const ff = spawn('ffmpeg', ['-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
+    const ff = spawn('ffmpeg', ['-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
       '-c:v', 'libx264', '-crf', '18', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', tmp],
       { stdio: ['pipe', 'ignore', 'inherit'] });
     const total = Math.ceil((t1 - t0) * FPS);
@@ -54,7 +54,7 @@ const OUT = path.join(__dirname, 'out');
     if (audio) {
       // mezcla la voz: recorte [start, end] con salida suave y silencio hasta el final del video
       const len = audio.end - audio.start, final = path.join(OUT, name);
-      const mux = spawn('ffmpeg', ['-y', '-i', tmp, '-ss', String(audio.start), '-t', String(len), '-i', path.join(__dirname, audio.src),
+      const mux = spawn('ffmpeg', ['-y', '-v', 'error', '-i', tmp, '-ss', String(audio.start), '-t', String(len), '-i', path.join(__dirname, audio.src),
         '-filter_complex', `[1:a]afade=t=out:st=${Math.max(0, len - 0.2)}:d=0.2,apad[a]`,
         '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart',
         final.replace('.mp4', '.mux.mp4')], { stdio: ['ignore', 'ignore', 'inherit'] });
