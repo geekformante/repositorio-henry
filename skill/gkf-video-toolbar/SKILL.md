@@ -1,9 +1,9 @@
 ---
-name: toolbar-animation
-description: Crea videos explicativos verticales en estilo flat a partir de una narración. Un cursor animado usa herramientas de una barra estilo Illustrator (seleccionar, dibujar, escribir, borrar, rellenar, alejar la cámara) para ilustrar las ideas clave sobre una mesa de trabajo oscura con puntos, sincronizado palabra por palabra con el audio. Úsala cuando pidan un video, reel o short "con la barra de herramientas", "estilo programa de diseño", "con el cursor que dibuja", o pidan animar una narración/voz en off con esta skill.
+name: gkf-video-toolbar
+description: Crea videos explicativos verticales en estilo flat a partir de una narración. Un cursor animado usa herramientas de una barra estilo Illustrator (seleccionar, dibujar, escribir, borrar, rellenar, alejar la cámara) para ilustrar las ideas clave sobre una mesa de trabajo oscura con puntos, sincronizado palabra por palabra con el audio. Úsala cuando pidan un video, reel o short "con la barra de herramientas", "estilo programa de diseño", "con el cursor que dibuja", o pidan animar una narración/voz en off con esta skill (gkf-video-toolbar).
 ---
 
-# Toolbar Animation
+# GKF Video Toolbar
 
 Videos verticales donde **la animación la ejecuta un cursor con herramientas de diseño**. El cursor va a la barra, toma una herramienta (se ve el recuadro con nombre y atajo), vuelve al lienzo y dibuja, escribe, borra, rellena o mueve lo que ilustra la narración. Todo queda sincronizado con la voz.
 
