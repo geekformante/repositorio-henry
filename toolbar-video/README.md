@@ -1,6 +1,28 @@
 # Toolbar Video
 
-> **Versión actual: v3** (`index.html`): barra de una hilera con herramientas de Illustrator, translúcida por defecto (`?solid` para la opaca), de arriba a abajo del video con 28 px de aire, y sin interfaz superior. La v1, fiel a Photoshop, quedó en `v1-photoshop.html` y en `out/v1_*`.
+
+> **Versión actual: v4.** Escena real con audio: `scenes/jpgxl.js` sobre `audio/jpgxl.mp3` (primeros ~19 s). Resultado: `out/jpgxl.mp4`.
+
+## v4: motor + escenas con audio
+
+Estructura:
+- `engine.js`: motor (barra, cámara, cursor, acciones, render). No cambia entre videos.
+- `scenes/<nombre>.js`: cada video define `window.SCENE` con el audio, los objetos iniciales y el guion.
+- `index.html?scene=jpgxl`: vista previa (clic para reproducir con audio).
+- `audio/transcript.json`: transcripción con tiempos por palabra (faster-whisper, modelo small).
+
+```bash
+node render.js video --scene=jpgxl   # out/jpgxl.mp4 con la voz mezclada
+node render.js stills 2.6 9.6 19.5   # fotogramas para revisar
+```
+
+**Sincronía con la voz:** `{ do:'at', t:8.3, label:'Chrome' }` ancla la acción siguiente a ese segundo del audio. Si la acción va adelantada, espera; si va tarde, el motor lo avisa en consola (`TL.late`) con cuánto se retrasó. Así sabemos cuándo conviene usar un atajo en lugar de viajar a la barra.
+
+Acciones del guion: `at`, `wait`, `pick` (ir a la barra), `key` (atajo), `drag` (dibujar figura), `click` (rellenar o poner texto), `type` (escribir; `upto:'Chrome'` escribe hasta esa palabra), `zoom` (ajustar la cámara a un rectángulo), `stroke` (pincel o borrador, `type:'erase'`), `move` (Selección: arrastra una figura con todo lo que contiene).
+
+Objetos de escena: `photo` (paisaje plano con etiqueta `.jpg` y distintivo; al borrarse se ve el tablero de transparencia y puede aparecer en ola con `appear`).
+
+Barra: una hilera, 22 herramientas de Illustrator, translúcida, 28 px de aire a la izquierda y 120 px arriba y abajo.
 
 ## v2: interfaz más abstracta y moderna (estilo Figma)
 

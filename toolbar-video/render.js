@@ -17,7 +17,7 @@ const OUT = path.join(__dirname, 'out');
   const [mode, ...args] = argv.filter(a => !a.startsWith('--'));
   const solid = flags.includes('--solid');
   const H = +(flags.find(f => f.startsWith('--h='))?.slice(4) ?? 2340);
-  const q = new URLSearchParams({ render: 1, h: H }); if (solid) q.set('solid', 1);
+  const q = new URLSearchParams({ render: 1, h: H, scene: flags.find(f => f.startsWith('--scene='))?.slice(8) ?? 'jpgxl' }); if (solid) q.set('solid', 1);
   const suffix = (solid ? '_solid' : '') + (H === 1920 ? '_9x16' : '');
 
   fs.mkdirSync(OUT, { recursive: true });
@@ -35,7 +35,8 @@ const OUT = path.join(__dirname, 'out');
     }
   } else if (mode === 'video' || mode === 'clip') {
     const t0 = mode === 'clip' ? +args[0] : 0, t1 = mode === 'clip' ? +args[1] : duration;
-    const name = (mode === 'clip' ? 'clip' : 'demo') + suffix + '.mp4';
+    const scene = await page.evaluate(() => (new URLSearchParams(location.search).get('scene') || 'jpgxl'));
+    const name = (mode === 'clip' ? 'clip_' : '') + scene + suffix + '.mp4';
     const tmp = path.join(OUT, name.replace('.mp4', '.tmp.mp4'));
     const ff = spawn('ffmpeg', ['-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
       '-c:v', 'libx264', '-crf', '18', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', tmp],
@@ -49,8 +50,18 @@ const OUT = path.join(__dirname, 'out');
     ff.stdin.end();
     const code = await new Promise(r => ff.on('close', r));
     if (code !== 0) throw new Error('ffmpeg falló: ' + code);
-    fs.renameSync(tmp, path.join(OUT, name));
-    console.log(`${name}: ${total} frames`);
+    const audio = mode === 'video' ? await page.evaluate(() => window.SCENE.audio || null) : null;
+    if (audio) {
+      // mezcla la voz: recorte [start, end] con salida suave y silencio hasta el final del video
+      const len = audio.end - audio.start, final = path.join(OUT, name);
+      const mux = spawn('ffmpeg', ['-y', '-i', tmp, '-ss', String(audio.start), '-t', String(len), '-i', path.join(__dirname, audio.src),
+        '-filter_complex', `[1:a]afade=t=out:st=${Math.max(0, len - 0.2)}:d=0.2,apad[a]`,
+        '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart',
+        final.replace('.mp4', '.mux.mp4')], { stdio: ['ignore', 'ignore', 'inherit'] });
+      if (await new Promise(r => mux.on('close', r)) !== 0) throw new Error('ffmpeg (audio) falló');
+      fs.renameSync(final.replace('.mp4', '.mux.mp4'), final); fs.unlinkSync(tmp);
+    } else fs.renameSync(tmp, path.join(OUT, name));
+    console.log(`${name}: ${total} frames${audio ? ' + audio' : ''}`);
   }
   console.log('duración del guion:', duration.toFixed(2), 's');
   await browser.close();
